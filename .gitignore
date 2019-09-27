@@ -53,3 +53,10 @@ TAGS
 .vagrant
 
 *~
+
+data
+not
+shared
+\#*
+.env
+docker-compose.yml
