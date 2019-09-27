@@ -1,0 +1,31 @@
+# docker-compose for openstack
+#
+version: "2.4"
+services:
+
+  cinder-volume:
+    privileged: true
+    network_mode: host
+    build:
+      context: ./cinder-volume
+    volumes:
+      - ./shared/etc/cinder.conf:/etc/cinder/cinder.conf
+      - /dev/vdb:/dev/vdb
+    extra_hosts:
+     - "glance-api:10.0.0.11"
+     - "memcached:10.0.0.11"
+     - "mariadb:10.0.0.11"
+     - "rabbitmq:10.0.0.11"
+     - "keystone:10.0.0.11"
+     - "nova-api:10.0.0.11"
+
+  cinder-tgt:
+    build:
+      context: ./cinder-tgt
+    extra_hosts:
+     - "glance-api:10.0.0.11"
+     - "memcached:10.0.0.11"
+     - "mariadb:10.0.0.11"
+     - "rabbitmq:10.0.0.11"
+     - "keystone:10.0.0.11"
+     - "nova-api:10.0.0.11"

@@ -1,0 +1,253 @@
+# docker-compose for openstack
+#
+version: "2.4"
+services:
+
+  mariadb:
+   image: mariadb
+   ports:
+      - "3306:3306"
+   volumes:
+      - ./data/db:/var/lib/mysql
+
+  memcached:
+    image: memcached
+    ports:
+      - "11211:11211"
+
+  rabbitmq:
+    image: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "4369:4369"
+      - "5671:5671"
+      - "5672:5672"
+      - "25672:25672"
+    volumes:
+      - ./data/rabbit:/var/lib/rabbitmq
+
+  keystone:
+    build:
+      context: ./keystone
+    hostname: keystone
+    volumes:
+      - ./shared/bin/admin.sh:/usr/local/bin/admin.sh
+      - ./shared/etc/keystone.conf:/etc/keystone/keystone.conf
+      - ./shared/etc/keystone-uwsgi.ini:/etc/keystone/keystone-uwsgi.ini
+      - ./shared/etc/keystone-apache2.conf:/etc/apache2/apache2.conf
+      - ./shared/etc/keystone-apache2:/etc/init.d/apache2
+      - ./shared/etc/fernet-keys:/etc/keystone/fernet-keys
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mariadb
+      - memcached
+
+  glance-api:
+    build:
+      context: ./glance-api
+    hostname: glance-api
+    ports:
+      - "9292:9292"
+    volumes:
+      - ./shared/bin/finalize-glance:/usr/local/bin/finalize-glance
+      - ./shared/etc/glance-api.conf:/etc/glance/glance-api.conf
+      - ./shared/etc/glance-api-uwsgi.ini:/etc/glance/glance-api-uwsgi.ini
+    depends_on:
+      - mariadb
+      - memcached
+      - keystone
+
+  placement-api:
+    build:
+      context: ./placement-api
+    hostname: placement-api
+    ports:
+      - "8778:8778"
+    volumes:
+      - ./shared/etc/placement.conf:/etc/placement/placement.conf
+      - ./shared/etc/placement-api-uwsgi.ini:/etc/placement/placement-api-uwsgi.ini
+      - ./shared/bin/finalize-placement:/usr/local/bin/finalize-placement
+    depends_on:
+      - mariadb
+      - memcached
+      - keystone
+
+  nova-api:
+    build:
+      context: ./nova-api
+    hostname: nova-api
+    volumes:
+      - ./shared/etc/nova.conf:/etc/nova/nova.conf
+      - ./shared/bin/admin.sh:/usr/local/bin/admin.sh
+      - ./shared/bin/finalize-nova:/usr/local/bin/finalize-nova
+    ports:
+      - "8774:8774"
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  nova-scheduler:
+    build:
+      context: ./nova-scheduler
+    hostname: nova-scheduler
+    volumes:
+      - ./shared/etc/nova.conf:/etc/nova/nova.conf
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  nova-conductor:
+    build:
+      context: ./nova-conductor
+    hostname: nova-conductor
+    volumes:
+      - ./shared/etc/nova.conf:/etc/nova/nova.conf
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  nova-novncproxy:
+    build:
+      context: ./nova-novncproxy
+    hostname: nova-novncproxy
+    volumes:
+      - ./shared/etc/nova.conf:/etc/nova/nova.conf
+      - ./shared/etc/nova-consoleproxy:/etc/default/nova-consoleproxy
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  cinder-api:
+    build:
+      context: ./cinder-api
+    hostname: cinder-api
+    volumes:
+      - ./shared/etc/cinder.conf:/etc/cinder/cinder.conf
+      - ./shared/bin/finalize-cinder:/usr/local/bin/finalize-cinder
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  cinder-scheduler:
+    build:
+      context: ./cinder-scheduler
+    hostname: cinder-scheduler
+    volumes:
+      - ./shared/etc/cinder.conf:/etc/cinder/cinder.conf
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+      - memcached
+
+  neutron-server:
+    build:
+      context: ./neutron-server
+    hostname: neutron-server
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/metadata_agent.ini:/etc/neutron/metadata_agent.ini
+      - ./shared/bin/finalize-neutron:/usr/local/bin/finalize-neutron
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+
+  neutron-api:
+    build:
+      context: ./neutron-api
+    hostname: neutron-api
+    ports:
+      - "9696:9696"
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/neutron-api-uwsgi.ini:/etc/neutron/neutron-api-uwsgi.ini
+      - ./shared/etc/neutron-plugins:/etc/neutron/plugins
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+
+  neutron-linuxbridge-agent:
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/neutron-plugins/ml2/linuxbridge_agent.ini:/etc/neutron/plugins/ml2/linuxbridge_agent.ini
+    build:
+      context: ./neutron-linuxbridge-agent
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+    extra_hosts:
+     - "mariadb:127.0.0.1"
+     - "rabbitmq:127.0.0.1"
+     - "keystone:127.0.0.1"
+
+  neutron-dhcp-agent:
+    privileged: true
+    hostname: neutron-dhcp-agent
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/dhcp_agent.ini:/etc/neutron/dhcp_agent.ini
+    build:
+      context: ./neutron-dhcp-agent
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+
+  neutron-metadata-agent:
+    hostname: neutron-metadata-agent
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/metadata_agent.ini:/etc/neutron/metadata_agent.ini
+    build:
+      context: ./neutron-metadata-agent
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+
+  neutron-l3-agent:
+    privileged: true
+    hostname: neutron-l3-agent
+    volumes:
+      - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf
+      - ./shared/etc/l3_agent.ini:/etc/neutron/l3_agent.ini
+    build:
+      context: ./neutron-l3-agent
+    depends_on:
+      - mariadb
+      - rabbitmq
+      - keystone
+
+  horizon:
+    build:
+      context: ./horizon
+    hostname: horizon
+    volumes:
+      - ./shared/etc/local_settings.py:/etc/openstack-dashboard/local_settings.py
+      - ./shared/etc/horizon-servername.conf:/etc/apache2/conf-enabled/servername.conf
+      - ./shared/etc/horizon-vhost.conf:/etc/apache2/sites-enabled/000-default.conf
+      - ./shared/etc/horizon-log.conf:/etc/apache2/conf-enabled/logs.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - keystone
+      - memcached
+
+volumes:
+  sockets:

@@ -1,0 +1,17 @@
+# docker-compose for openstack
+#
+version: "2.4"
+services:
+
+  mariadb:
+   image: mariadb
+   environment:
+      MYSQL_ROOT_PASSWORD: $MYSQL_ROOT_PASSWORD
+   ports:
+      - "3306:3306"
+   volumes:
+      - ./shared/mariadb:/docker-entrypoint-initdb.d   
+      - ./data/db:/var/lib/mysql
+
+volumes:
+  sockets:

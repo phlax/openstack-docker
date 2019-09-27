@@ -1,0 +1,40 @@
+# docker-compose for openstack compute node
+#
+version: "2.4"
+services:
+
+  nova-compute:
+    build:
+      context: ./nova-compute
+    hostname: compute0
+    volumes:
+      - ./shared/bin/admin.sh:/usr/local/bin/admin.sh
+      - ./shared/etc/nova.conf:/etc/nova/nova.conf
+      - ./shared/etc/nova-compute.conf:/etc/nova/nova-compute.conf
+      - /dev/kvm:/dev/kvm
+      - /var/run/libvirt/libvirt-sock:/var/run/libvirt/libvirt-sock
+    extra_hosts:
+     - "mariadb:10.0.0.11"
+     - "rabbitmq:10.0.0.11"
+     - "keystone:10.0.0.11"
+     - "nova-api:10.0.0.11"
+     - "neutron-api:10.0.0.11"
+     - "placement-api:10.0.0.11"
+     
+  neutron-linuxbridge-agent:
+    build:
+      context: ./neutron-linuxbridge-agent-compute
+    privileged: true
+    network_mode: host    
+    volumes:
+     - ./shared/etc/nova.conf:/etc/nova/nova.conf
+     - ./shared/etc/neutron.conf:/etc/neutron/neutron.conf     
+     - ./shared/etc/linuxbridge_agent.ini:/etc/neutron/plugins/ml2/linuxbridge_agent.ini
+    extra_hosts:
+     - "mariadb:10.0.0.11"
+     - "rabbitmq:10.0.0.11"
+     - "keystone:10.0.0.11"
+     - "nova-api:10.0.0.11"
+     - "neutron-api:10.0.0.11"
+     - "placement-api:10.0.0.11"     
+     

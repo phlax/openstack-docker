@@ -1,0 +1,20 @@
+# docker-compose for openstack
+#
+version: "2.4"
+services:
+
+  openstack:
+    build:
+      context: ./openstack-cli
+    restart: no
+    volumes:
+      - ./shared/bin:/usr/local/bin
+      - ./shared/etc/keystone.conf:/etc/keystone/keystone.conf
+    depends_on:
+      - mariadb
+      - memcached
+      - rabbitmq
+      - keystone
+
+volumes:
+  sockets:
