@@ -1,0 +1,88 @@
+#!/bin/bash -e
+
+function destroy_existing {
+    sudo systemctl stop openstack
+    docker-compose stop && docker container prune  -f && docker volume prune -f
+    sudo rm -rf data/rabbit/* && sudo rm -rf data/db/*  && sudo rm -f data/rabbit/.erlang.cookie
+}
+
+function initialize_db {
+    echo "SETUP: mariadb"
+    docker-compose -f docker-compose.init.yml up -d mariadb
+    echo "waiting for db to initialize..."    
+    sleep 30
+    docker-compose -f docker-compose.init.yml logs mariadb
+    docker-compose -f docker-compose.init.yml stop mariadb
+    docker-compose up -d mariadb
+}
+
+function interpolate_vars {
+    sudo chown phlax shared/etc/keystone.conf
+
+    set -o allexport
+    . .env
+    set +o allexport
+
+    envsubst < shared/bin/finalize-rabbit.tpl > shared/bin/finalize-rabbit
+    envsubst < shared/bin/install-db.tpl > shared/bin/install-db
+    envsubst < shared/bin/install-keystone.tpl > shared/bin/install-keystone
+
+    chmod +x shared/bin/finalize-rabbit
+    chmod +x shared/bin/install-db
+    chmod +x shared/bin/install-keystone
+
+    envsubst < shared/etc/glance-registry.conf.tpl > shared/etc/glance-registry.conf
+    envsubst < shared/etc/glance-api.conf.tpl > shared/etc/glance-api.conf
+    envsubst < shared/etc/cinder.conf.tpl > shared/etc/cinder.conf
+    envsubst < shared/etc/neutron.conf.tpl > shared/etc/neutron.conf
+    envsubst < shared/etc/nova.conf.tpl > shared/etc/nova.conf
+    envsubst < shared/etc/placement.conf.tpl > shared/etc/placement.conf
+    envsubst < shared/etc/keystone.conf.tpl > shared/etc/keystone.conf
+}
+
+function finalize_rabbit {
+    echo "SETUP: rabbitmq"
+    docker-compose run \
+		   -v $PWD/shared/bin/finalize-rabbit:/usr/local/bin/finalize-rabbit \
+                   rabbitmq \
+	           /usr/local/bin/finalize-rabbit
+    echo "STARTING SERVER: rabbitmq"
+    docker-compose up -d rabbitmq
+    sleep 10
+}
+
+function install_keystone {
+    echo "SETUP: keystone"
+    docker-compose run \
+		   -v $PWD/shared/bin/install-db:/usr/local/bin/install-db \
+		   -v $PWD/shared/bin/install-keystone:/usr/local/bin/install-keystone \
+		   keystone \
+		   /usr/local/bin/install-keystone
+    echo "STARTING SERVER: keystone"
+    docker-compose up -d keystone
+}
+
+function finalize_services {
+
+    echo "SETUP: glance"
+    docker-compose run glance-api  finalize-glance
+
+    echo "SETUP: placement"
+    docker-compose run placement-api finalize-placement
+
+    echo "SETUP: nova"
+    docker-compose run nova-api finalize-nova
+
+    echo "SETUP: neutron"
+    docker-compose run neutron-server finalize-neutron
+
+    echo "SETUP: cinder"
+    docker-compose run cinder-api finalize-cinder
+}
+
+destroy_existing
+interpolate_vars
+initialize_db
+finalize_rabbit
+install_keystone
+finalize_services
