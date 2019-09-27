@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -e
+
+echo "Starting apache server..."
+
+exec env -i LANG=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin apache2ctl -D FOREGROUND
